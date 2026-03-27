@@ -1012,7 +1012,7 @@ function closeSidebar(){
 function saveUrl(){
   const v=document.getElementById('scriptUrl').value.trim();
   const err=document.getElementById('setupErr');
-  if(!v.includes('script.google.com')&&!v.includes('macros')){err.style.display='block';return;}
+  if(!v.startsWith('https://')){err.style.display='block';return;}
   err.style.display='none';
   scriptUrl=v;localStorage.setItem('sv-script-url',v);
   document.getElementById('setupScreen').style.display='none';
@@ -1977,7 +1977,6 @@ function renderSponsorList(){
 // ══════════════════════════════════════════════
 const SH_DAIGEO  = {id:'1qA8oxCCe0QVQhCsXm-nsbjJSx0tRCLPvWEhDenBfOWU'};
 const SH_JOLGI_NEW = {id:'1DFG4bhJdpWl9a_4K2a4xlekgoUso3aDwEZRi2BeCPYA'};
-const SH_DAIGEO  = {id:'1qA8oxCCe0QVQhCsXm-nsbjJSx0tRCLPvWEhDenBfOWU'};
 const SH_AIMOVING= {id:'1Do3aDmmrXoNYj2trcjumRRGNCOy3jXKZiqiiB9M-YN0'};
 function getSHGid(key,fallback){return localStorage.getItem(key)||fallback||'';}
 function setSHGid(key,val){localStorage.setItem(key,val);}
@@ -2800,37 +2799,6 @@ async function loadDaigeo(){
     });
     renderDaigeo(allItems);
   }catch(e){renderErr('daigeoBody','다이겨 시트를 불러오지 못했습니다.');}
-}
-
-function fmtKRW(n){
-  if(!n||isNaN(n))return '0원';
-  n=Math.round(n);
-  if(n<0)return '-'+fmtKRW(-n);
-  const uk=Math.floor(n/100000000);
-  const man=Math.floor((n%100000000)/10000);
-  const won=n%10000;
-  let s='';
-  if(uk)s+=uk+'억 ';
-  if(man){
-    // 만 단위 천 표시
-    const manChon=Math.floor(man/1000);
-    const manRest=man%1000;
-    if(manChon)s+=manChon+'천 ';
-    if(manRest)s+=manRest+'만 ';
-    else if(manChon)s+='만 ';
-  }
-  if(won){
-    const wonChon=Math.floor(won/1000);
-    const wonRest=won%1000;
-    if(wonChon)s+=wonChon+'천';
-    if(wonRest)s+=(wonChon?' ':'')+(wonRest)+'원';
-    else s+='원';
-  } else if(s){
-    s=s.trim()+'원';
-  } else {
-    s='0원';
-  }
-  return s.trim();
 }
 
 
