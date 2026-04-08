@@ -471,6 +471,16 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;hei
     width:297mm !important;height:210mm !important;
   }
 }
+
+/* ── 공지사항 배너 ── */
+.notice-banner{background:linear-gradient(135deg,rgba(201,169,110,.18),rgba(201,169,110,.08));border:1px solid var(--gb);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:flex-start;animation:up .3s ease}
+.notice-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.notice-body{flex:1;min-width:0}
+.notice-title{font-size:14px;font-weight:700;color:var(--gold);margin-bottom:3px}
+.notice-text{font-size:13px;color:var(--mid);line-height:1.6;white-space:pre-wrap}
+.notice-date{font-size:11px;color:var(--dim);margin-top:5px}
+.notice-close{background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;padding:0;flex-shrink:0;line-height:1}
+.notice-close:hover{color:#fff}
 </style>
 </head>
 <body>
@@ -583,7 +593,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;hei
     <button class="mob-menu-btn" onclick="toggleSidebar()">☰</button>
     <div class="bmark">◇</div>
     <div class="brand-text">
-      <div class="bname">Semo<em>View</em> Daily <span style="font-size:11px;font-family:'DM Sans',sans-serif;color:var(--dim);font-weight:400;letter-spacing:0;vertical-align:middle">v1.3</span></div>
+      <div class="bname">Semo<em>View</em> Daily <span style="font-size:11px;font-family:'DM Sans',sans-serif;color:var(--dim);font-weight:400;letter-spacing:0;vertical-align:middle">v1.5</span></div>
       <div class="bsub"><a href="https://blog.naver.com/skycreation" target="_blank">blog.naver.com/skycreation ↗</a></div>
     </div>
   </div>
@@ -953,6 +963,12 @@ try{todos=JSON.parse(localStorage.getItem('sv-todos')||'[]')}catch(_){}
   // 브리핑에서 블로그 지연 표시를 위해 백그라운드 로드
   // 절기문자도 백그라운드 로드 (브리핑 절기 섹션용)
   loadJolgimuBg();
+  loadNotice();
+  // 5초 후 자동 재시도 (프록시 초기 실패 대비)
+  setTimeout(()=>{
+    if(!jolgiDatesGlobal.length) loadJolgimuBg();
+    loadNotice();
+  }, 5000);
 })();
 
 function tick(){
@@ -2996,6 +3012,55 @@ function toggleDgMore(btn){
   const isHidden=rows[0]&&rows[0].style.display==='none';
   rows.forEach(r=>r.style.display=isHidden?'flex':'none');
   btn.textContent=isHidden?'▲ 접기':'+ '+rows.length+'건 더 보기';
+}
+
+// ══════════════════════════════════════════════
+//  공지사항
+// ══════════════════════════════════════════════
+let noticeScriptUrl = 'https://script.google.com/macros/s/AKfycbwJn8ZSbXxB7XvF6_rlRFFdWLhwn7rGr83D7Ww3YJp7f7OvNRvP3pbbwLUq7xW3fCpE/exec';
+const SH_NOTICE = '1atWDHWjyATL-NeqpFtLt0plAkeUn0bdA6q2L24mDAsk';
+const NOTICE_CSV_URL = `https://docs.google.com/spreadsheets/d/${SH_NOTICE}/export?format=csv&gid=0`;
+
+async function loadNotice(){
+  try{
+    const csv = await proxyFetch(NOTICE_CSV_URL);
+    const rows = csvParse(csv);
+    if(!rows||!rows.length)return;
+    const r = rows[0];
+    const title=(r[0]||'').trim();
+    const body=(r[1]||'').trim();
+    const date=(r[2]||'').trim();
+    if(!title&&!body)return;
+
+    // 읽음 처리 — 공지 날짜+제목 기준
+    const noticeKey='sv-notice-read-'+(date+title).replace(/\s/g,'');
+    if(localStorage.getItem(noticeKey))return;
+
+    renderNotice({title,body,date,noticeKey});
+  }catch(_){}
+}
+
+function renderNotice({title,body,date,noticeKey}){
+  // 브리핑 최상단에 삽입
+  const brief=document.getElementById('briefBody');
+  if(!brief)return;
+  const div=document.createElement('div');
+  div.className='notice-banner';
+  div.id='noticeBanner';
+  div.innerHTML=`
+    <div class="notice-icon">📢</div>
+    <div class="notice-body">
+      ${title?`<div class="notice-title">${esc(title)}</div>`:''}
+      ${body?`<div class="notice-text">${esc(body)}</div>`:''}
+      ${date?`<div class="notice-date">${esc(date)}</div>`:''}
+    </div>
+    <button class="notice-close" onclick="dismissNotice('${noticeKey}')">✕</button>`;
+  brief.prepend(div);
+}
+
+function dismissNotice(key){
+  localStorage.setItem(key,'1');
+  document.getElementById('noticeBanner')?.remove();
 }
 
 function openHelp(){document.getElementById('helpOverlay').classList.add('show');}
