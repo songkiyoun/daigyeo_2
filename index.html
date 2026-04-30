@@ -1352,7 +1352,6 @@ width:297mm !important;height:210mm !important;
 <button class="tbtn" onclick="openModal()">+ 일정</button>
 <button class="tbtn" onclick="syncFromSheet()">↻</button>
 <button class="tbtn" onclick="resetUrl()">🔗</button>
-<button class="tbtn" onclick="openNoticeEditor()">📢</button>
 <button class="tbtn" onclick="openSearch()">🔍</button>
 <button class="tbtn" onclick="openHelp()">?</button>
 </div>
@@ -1895,21 +1894,6 @@ const ytOver=false;
 
 // 협찬 마감 임박
 const spUrgent=sponsors.filter(s=>!s.done&&s.deadline&&daysDiff(new Date(s.deadline),today)<=2&&daysDiff(new Date(s.deadline),today)>=-1);
-// 블로그 발행 지연 — 명시적으로 '발행전' 상태이면서 날짜가 과거인 것만
-// 발행 카테고리만 (블로그_발행, SNS_발행) — 결제 행 제외
-const blogOverdue=blogTimeline.filter(t=>{
-if(!t||!t.date)return false;
-if(t.cat&&t.cat.includes('결제'))return false;
-return t.status==='발행전'&&daysDiff(t.date,today)<=0;
-});
-const blogUpcoming=blogTimeline.filter(t=>{
-if(!t||!t.date)return false;
-if(t.cat&&t.cat.includes('결제'))return false;
-if(t.status!=='발행전')return false;
-const d=daysDiff(t.date,today);
-return d>0&&d<=7;
-});
-
 // ── KPI 상단 6칸
 html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:14px">
    <div class="kpi-card" onclick="nav('schedule',document.querySelector('[onclick*=\\'schedule\\']'))" style="cursor:pointer">
@@ -1929,10 +1913,6 @@ html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:9px;marg
    </div>
      <div class="kpi-val ${ytOver?'danger':ytDays!==null?'ok':'dim'}">${ytDays!==null?ytDays+'일 전':'—'}</div>
      <div class="kpi-sub">${ytOver?'⚠ 업로드 필요':'정상'}</div>
-   </div>
-   <div class="kpi-label">블로그 발행 지연</div>
-     <div class="kpi-val ${blogOverdue.length?'danger':'dim'}">${blogOverdue.length}건</div>
-     <div class="kpi-sub">예정 ${blogUpcoming.length}건</div>
    </div>
    <div class="kpi-label">협찬 마감 임박</div>
      <div class="kpi-val ${spUrgent.length?'danger':'dim'}">${spUrgent.length}건</div>
@@ -1989,33 +1969,6 @@ html+=`<div class="brow"><div class="brow-left"><div class="bname">${s.brand?`<s
 });
 html+=`</div>`;
 }
-
-// ── 블로그 발행 현황 (지연 or 이번주 예정 있을 때만)
-if(blogOverdue.length||blogUpcoming.length){
-html+=`<div class="bcard ${blogOverdue.length?'alert':''}"><div class="bcardtitle">📝 블로그 발행 현황${blogOverdue.length?` <span class="tag r">지연 ${blogOverdue.length}건</span>`:''}</div>`;
-blogOverdue.slice(0,2).forEach(t=>{
-const d=Math.abs(daysDiff(t.date,today));
-html+=`<div class="brow" style="border-left:2px solid var(--red);padding-left:10px;margin-left:-2px">
-       <div class="brow-left">
-         <div class="bname" style="color:var(--red)">⚠ D+${d}일 · ${esc(t.name||t.round||'')}</div>
-         <div class="bsub-t">${esc(t.content||t.cat||'내용 미정')} · ${esc(t.status||'')}</div>
-       </div>
-       <div class="bval" style="font-size:11px;color:var(--red)">${fmtDate(t.date)}</div>
-     </div>`;
-});
-blogUpcoming.slice(0,3).forEach(t=>{
-const d=daysDiff(t.date,today);
-const lbl=d===0?'🔴 오늘':d===1?'🟡 내일':`D-${d}일`;
-html+=`<div class="brow">
-       <div class="brow-left">
-         <div class="bname">${lbl} · ${esc(t.name||t.round||'')}</div>
-         <div class="bsub-t">${esc(t.content||t.cat||'내용 미정')} · ${esc(t.status||'')}</div>
-       </div>
-       <div class="bval" style="font-size:11px;color:${d<=1?'var(--orange)':'var(--mid)'}">${fmtDate(t.date)}</div>
-     </div>`;
-});
-
-
 // ── 절기문자 임박 현황 (jolgiDatesGlobal 로드된 경우)
 if(jolgiDatesGlobal&&jolgiDatesGlobal.length){
 const jolgiSoon=jolgiDatesGlobal.filter(j=>{
@@ -2051,7 +2004,6 @@ const adv=h<10?'오전 집중 타임입니다. 중요한 업무부터 처리하�
 html+=`<div class="advice-box"><div class="advice-title">💡 오늘의 조언</div><div class="advice-text">${adv}</div></div>`;
 
 body.innerHTML=html;
-}
 }
 
 // ══════════════════════════════════════════════
@@ -4203,147 +4155,6 @@ return `<div class="bcard">
  </div>`;
 }
 
-
-// ══════════════════════════════════════════════
-//  공지사항
-// ══════════════════════════════════════════════
-const SH_NOTICE = '1atWDHWjyATL-NeqpFtLt0plAkeUn0bdA6q2L24mDAsk';
-const NOTICE_CSV_URL = `https://docs.google.com/spreadsheets/d/1atWDHWjyATL-NeqpFtLt0plAkeUn0bdA6q2L24mDAsk/export?format=csv&gid=0`;
-
-async function loadNotice(){
-try{
-const csv = await proxyFetch(NOTICE_CSV_URL);
-const rows = csvParse(csv);
-if(!rows||!rows.length)return;
-const r = rows[0];
-const title=(r[0]||'').trim();
-const body=(r[1]||'').trim();
-const date=(r[2]||'').trim();
-if(!title&&!body)return;
-
-// 읽음 처리 — 공지 날짜+제목 기준
-const noticeKey='sv-notice-read-'+(date+title).replace(/\s/g,'');
-if(localStorage.getItem(noticeKey))return;
-
-renderNotice({title,body,date,noticeKey});
-}catch(_){}
-}
-
-function renderNotice({title,body,date,noticeKey}){
-// 브리핑 최상단에 삽입
-const brief=document.getElementById('briefBody');
-if(!brief)return;
-const div=document.createElement('div');
-div.className='notice-banner';
-div.id='noticeBanner';
-div.innerHTML=`
-   <div class="notice-icon">📢</div>
-   <div class="notice-body">
-     ${title?`<div class="notice-title">${esc(title)}</div>`:''}
-     ${body?`<div class="notice-text">${esc(body)}</div>`:''}
-     ${date?`<div class="notice-date">${esc(date)}</div>`:''}
-   </div>
-   <button class="notice-close" onclick="dismissNotice('${noticeKey}')">✕</button>`;
-brief.prepend(div);
-}
-
-function dismissNotice(key){
-localStorage.setItem(key,'1');
-document.getElementById('noticeBanner')?.remove();
-}
-
-// 공지 작성 (개인형 전용)
-let noticeScriptUrl = localStorage.getItem('sv-notice-url') || 'https://script.google.com/macros/s/AKfycbwVlLzi8VVtEiinUXI4wk75DRHXPR6x-xDfrCRWE5-0_5UBdEsO4f6Hfbn-mgEtniGd/exec';
-
-function openNoticeEditor(){
-const overlay = document.getElementById('noticeEditorOverlay');
-if(overlay){ overlay.classList.add('show'); return; }
-// 동적 생성
-const el = document.createElement('div');
-el.id = 'noticeEditorOverlay';
-el.className = 'help-overlay';
-el.innerHTML = `
-   <div class="help-modal" style="max-width:500px">
-     <div class="help-hdr">
-       <div class="help-ttl">📢 공지 <em>작성</em></div>
-       <button class="help-close" onclick="document.getElementById('noticeEditorOverlay').classList.remove('show')">✕</button>
-     </div>
-     <div style="padding:20px 22px;display:flex;flex-direction:column;gap:12px">
-       <div>
-         <div class="field-lbl" style="font-size:10.5px;letter-spacing:.7px;color:var(--dim);margin-bottom:5px;font-weight:700">공지 제목</div>
-         <input id="noticeTitle" style="width:100%;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:9px 13px;color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;outline:none" placeholder="공지 제목 입력">
-       </div>
-       <div>
-         <div class="field-lbl" style="font-size:10.5px;letter-spacing:.7px;color:var(--dim);margin-bottom:5px;font-weight:700">공지 내용</div>
-         <textarea id="noticeBody" style="width:100%;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:9px 13px;color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;outline:none;min-height:100px;resize:vertical" placeholder="공지 내용 입력"></textarea>
-       </div>
-       <div>
-         <div class="field-lbl" style="font-size:10.5px;letter-spacing:.7px;color:var(--dim);margin-bottom:5px;font-weight:700">공지 Apps Script URL</div>
-         <input id="noticeUrl" style="width:100%;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:9px 13px;color:#fff;font-family:'DM Sans',sans-serif;font-size:13px;outline:none" placeholder="https://script.google.com/…" value="https://script.google.com/macros/s/AKfycbwJn8ZSbXxB7XvF6_rlRFFdWLhwn7rGr83D7Ww3YJp7f7OvNRvP3pbbwLUq7xW3fCpE/exec">
-       </div>
-       <div style="display:flex;gap:8px;justify-content:flex-end">
-         <button onclick="clearNotice()" style="background:rgba(224,85,85,.15);border:1px solid rgba(224,85,85,.3);color:var(--red);border-radius:8px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer">🗑 공지 삭제</button>
-         <button onclick="saveNotice()" style="background:var(--gold);color:#0c0c11;border:none;border-radius:8px;padding:8px 16px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer">📢 공지 등록</button>
-       </div>
-       <div id="noticeStatus" style="font-size:12px;color:var(--dim);text-align:center;min-height:16px"></div>
-     </div>
-   </div>`;
-document.body.appendChild(el);
-el.classList.add('show');
-}
-
-async function saveNotice(){
-const url = document.getElementById('noticeUrl').value.trim();
-const title = document.getElementById('noticeTitle').value.trim();
-const body = document.getElementById('noticeBody').value.trim();
-const status = document.getElementById('noticeStatus');
-if(!url){status.textContent='Apps Script URL을 입력해주세요.';return;}
-if(!title&&!body){status.textContent='제목 또는 내용을 입력해주세요.';return;}
-noticeScriptUrl = url;
-localStorage.setItem('sv-notice-url', url);
-status.textContent = '등록 중…';
-try{
-const pu = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-const res = await fetch(pu,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({title,body})});
-const json = JSON.parse(await res.text());
-if(json.ok){
-status.style.color='var(--green)';
-status.textContent='✓ 공지가 등록됐습니다. 배포형에서 동기화 시 표시됩니다.';
-} else throw new Error();
-}catch(e){
-try{
-await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({title,body}),mode:'no-cors'});
-status.style.color='var(--green)';
-status.textContent='✓ 전송됨 (결과 확인 불가)';
-}catch(e2){
-status.style.color='var(--red)';
-status.textContent='✗ 전송 실패. URL을 확인해주세요.';
-}
-}
-}
-
-async function clearNotice(){
-const url = document.getElementById('noticeUrl').value.trim() || noticeScriptUrl;
-const status = document.getElementById('noticeStatus');
-if(!url){status.textContent='Apps Script URL을 입력해주세요.';return;}
-status.textContent = '삭제 중…';
-try{
-const pu = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-await fetch(pu,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({title:'',body:''})});
-status.style.color='var(--green)';
-status.textContent='✓ 공지가 삭제됐습니다.';
-}catch(e){
-try{
-await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify({title:'',body:''}),mode:'no-cors'});
-status.style.color='var(--green)';
-status.textContent='✓ 전송됨';
-}catch(e2){
-status.style.color='var(--red)';
-status.textContent='✗ 실패';
-}
-}
-}
-
 function openHelp(){document.getElementById('helpOverlay').classList.add('show');}
 function closeHelp(){document.getElementById('helpOverlay').classList.remove('show');}
 
@@ -5275,12 +5086,10 @@ renderSched();
 // 블로그 타임라인·절기문자 백그라운드 로드 (동기화와 병렬 실행)
 loadBlogBg();
 loadJolgimuBg();
-loadNotice();
 // 5초 후 자동 재시도 (프록시 초기 실패 대비)
 setTimeout(()=>{
 if(!blogLoaded) loadBlogBg();
 if(!jolgiDatesGlobal.length) loadJolgimuBg();
-loadNotice();
 }, 5000);
 document.getElementById('evModal').addEventListener('click',function(e){if(e.target===this)closeModal();});
 document.getElementById('helpOverlay').addEventListener('click',function(e){if(e.target===this)closeHelp();});
